@@ -50,6 +50,8 @@ install:
     fi
 
   - pip install -e .[tests]
+  
+  - conda install libgcc=4.8
 
   # install TensorFlow (CPU version).
   - pip install tensorflow
