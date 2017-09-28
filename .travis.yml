@@ -65,15 +65,6 @@ install:
   - if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
       conda install pydot graphviz;
     fi
-  
-  #install libstdc++.so.6
-  - sudo apt-get install build-essential
-  - sudo apt-get install aptitude
-  - sudo apt-get install libstdc++6
-
-  # install libpython3.5
-  - sudo apt-get update
-  - sudo apt-get install libpython3.5
 
   #install open mpi
   - rm -rf ~/mpi
