@@ -52,6 +52,7 @@ install:
   - pip install -e .[tests]
   
   - conda install libgcc=4.8
+  - export LD_LIBRARY_PATH=$HOME/miniconda/envs/test-environment/lib/:$LD_LIBRARY_PATH
 
   # install TensorFlow (CPU version).
   - pip install tensorflow
