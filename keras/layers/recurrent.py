@@ -905,7 +905,7 @@ class SimpleRNN(RNN):
             warnings.warn('The `implementation` argument '
                           'in `SimpleRNN` has been deprecated. '
                           'Please remove it from your layer call.')
-        if K.backend() == 'cntk':
+        if K.backend() == 'cntk' and False:
             if not kwargs.get('unroll') and (dropout > 0 or recurrent_dropout > 0):
                 warnings.warn(
                     'RNN dropout is not supported with the CNTK backend '
@@ -1364,7 +1364,7 @@ class GRU(RNN):
             warnings.warn('`implementation=0` has been deprecated, '
                           'and now defaults to `implementation=1`.'
                           'Please update your layer call.')
-        if K.backend() == 'cntk':
+        if K.backend() == 'cntk' and False:
             if not kwargs.get('unroll') and (dropout > 0 or recurrent_dropout > 0):
                 warnings.warn(
                     'RNN dropout is not supported with the CNTK backend '
@@ -1859,7 +1859,7 @@ class LSTM(RNN):
             warnings.warn('`implementation=0` has been deprecated, '
                           'and now defaults to `implementation=1`.'
                           'Please update your layer call.')
-        if K.backend() == 'cntk':
+        if K.backend() == 'cntk' and False:
             if not kwargs.get('unroll') and (dropout > 0 or recurrent_dropout > 0):
                 warnings.warn(
                     'RNN dropout is not supported with the CNTK backend '
