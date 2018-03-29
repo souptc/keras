@@ -24,8 +24,7 @@ _BACKEND = 'tensorflow'
 _config_path = os.path.expanduser(os.path.join(_keras_dir, 'keras.json'))
 if os.path.exists(_config_path):
     try:
-        with open(_config_path) as f:
-            _config = json.load(f)
+        _config = json.load(open(_config_path))
     except ValueError:
         _config = {}
     _floatx = _config.get('floatx', floatx())

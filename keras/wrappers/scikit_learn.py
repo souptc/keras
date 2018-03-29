@@ -224,12 +224,7 @@ class KerasClassifier(BaseWrapper):
                 Class predictions.
         """
         kwargs = self.filter_sk_params(Sequential.predict_classes, kwargs)
-
-        proba = self.model.predict(x, **kwargs)
-        if proba.shape[-1] > 1:
-            classes = proba.argmax(axis=-1)
-        else:
-            classes = (proba > 0.5).astype('int32')
+        classes = self.model.predict_classes(x, **kwargs)
         return self.classes_[classes]
 
     def predict_proba(self, x, **kwargs):
@@ -252,7 +247,7 @@ class KerasClassifier(BaseWrapper):
                 (instead of `(n_sample, 1)` as in Keras).
         """
         kwargs = self.filter_sk_params(Sequential.predict_proba, kwargs)
-        probs = self.model.predict(x, **kwargs)
+        probs = self.model.predict_proba(x, **kwargs)
 
         # check if binary classification
         if probs.shape[1] == 1:

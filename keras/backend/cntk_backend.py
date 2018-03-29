@@ -1348,31 +1348,37 @@ def rnn(step_function, inputs, initial_states,
                                   'variable-length sequences. Please specify a '
                                   'static length for your sequences.')
 
+    rnn_inputs = inputs
     if need_convert:
         if go_backwards:
-            inputs = reverse(inputs, 1)
+            rnn_inputs = reverse(rnn_inputs, 1)
 
-        inputs = C.to_sequence(inputs)
+        rnn_inputs = C.to_sequence(rnn_inputs)
 
-        j = 0
-        while j < len(constants):
-            if isinstance(constants[j], list):
-                i = 0
-                while i < len(constants[j]):
-                    if _get_dynamic_axis_num(constants[j][i]) == 1:
-                        constants[j][i] = C.sequence.broadcast_as(constants[j][i], inputs)
-                    i += 1
+        rnn_constants = []
+        for constant in constants:
+            if isinstance(constant, list):
+                new_c = []
+                for c in constant:
+                    if _get_dynamic_axis_num(c) == 1:
+                        new_c.append(C.sequence.broadcast_as(c, rnn_inputs))
+                    else:
+                        new_c.append(c)
+                rnn_constants.append(new_c)
             else:
-                if _get_dynamic_axis_num(constants[j]) == 1:
-                    constants[j] = C.sequence.broadcast_as(constants[j], inputs)
-            j += 1
+                if _get_dynamic_axis_num(constant) == 1:
+                    rnn_constants.append(C.sequence.broadcast_as(constant, rnn_inputs))
+                else:
+                    rnn_constants.append(constant)
+    else:
+        rnn_constants = constants
 
     if mask is not None and not has_seq_axis(mask):
         if go_backwards:
             mask = reverse(mask, 1)
         if len(int_shape(mask)) == 2:
             mask = expand_dims(mask)
-        mask = C.to_sequence_like(mask, inputs)
+        mask = C.to_sequence_like(mask, rnn_inputs)
 
     states = tuple(initial)
 
@@ -1384,7 +1390,7 @@ def rnn(step_function, inputs, initial_states,
             for s, p in zip(states, place_holders):
                 past_values.append(C.sequence.past_value(p, s))
             new_output, new_states = step_function(
-                x, tuple(past_values) + tuple(constants))
+                x, tuple(past_values) + tuple(rnn_constants))
 
             if getattr(new_output, '_uses_learning_phase', False):
                 global uses_learning_phase
@@ -1399,7 +1405,7 @@ def rnn(step_function, inputs, initial_states,
                 new_output = n_s[0]
             return new_output, n_s
 
-        final_output, final_states = _recurrence(inputs, states, mask)
+        final_output, final_states = _recurrence(rnn_inputs, states, mask)
         last_output = C.sequence.last(final_output)
         last_states = [C.sequence.last(s) for s in final_states]
 
@@ -1512,71 +1518,12 @@ def separable_conv1d(x, depthwise_kernel, pointwise_kernel, strides=1,
 
 def separable_conv2d(x, depthwise_kernel, pointwise_kernel, strides=(1, 1),
                      padding='valid', data_format=None, dilation_rate=(1, 1)):
-    if data_format is None:
-        data_format = image_data_format()
-    if data_format not in {'channels_first', 'channels_last'}:
-        raise ValueError('Unknown data_format ' + str(data_format))
-
-    x = _preprocess_conv2d_input(x, data_format)
-    depthwise_kernel = _preprocess_conv2d_kernel(depthwise_kernel, data_format)
-    depthwise_kernel = C.reshape(C.transpose(depthwise_kernel, (1, 0, 2, 3)),
-                                 (-1, 1) + depthwise_kernel.shape[2:])
-    pointwise_kernel = _preprocess_conv2d_kernel(pointwise_kernel, data_format)
-    padding = _preprocess_border_mode(padding)
-
-    if dilation_rate == (1, 1):
-        strides = (1,) + strides
-        x = C.convolution(depthwise_kernel, x,
-                          strides=strides,
-                          auto_padding=[False, padding, padding],
-                          groups=x.shape[0])
-        x = C.convolution(pointwise_kernel, x,
-                          strides=(1, 1, 1),
-                          auto_padding=[False])
-    else:
-        if dilation_rate[0] != dilation_rate[1]:
-            raise ValueError('CNTK Backend: non-square dilation_rate is '
-                             'not supported.')
-        if strides != (1, 1):
-            raise ValueError('Invalid strides for dilated convolution')
-        x = C.convolution(depthwise_kernel, x,
-                          strides=dilation_rate[0],
-                          auto_padding=[False, padding, padding])
-        x = C.convolution(pointwise_kernel, x,
-                          strides=(1, 1, 1),
-                          auto_padding=[False])
-    return _postprocess_conv2d_output(x, data_format)
+    raise NotImplementedError
 
 
 def depthwise_conv2d(x, depthwise_kernel, strides=(1, 1), padding='valid',
                      data_format=None, dilation_rate=(1, 1)):
-    if data_format is None:
-        data_format = image_data_format()
-    if data_format not in {'channels_first', 'channels_last'}:
-        raise ValueError('Unknown data_format ' + str(data_format))
-
-    x = _preprocess_conv2d_input(x, data_format)
-    depthwise_kernel = _preprocess_conv2d_kernel(depthwise_kernel, data_format)
-    depthwise_kernel = C.reshape(C.transpose(depthwise_kernel, (1, 0, 2, 3)),
-                                 (-1, 1) + depthwise_kernel.shape[2:])
-    padding = _preprocess_border_mode(padding)
-    if dilation_rate == (1, 1):
-        strides = (1,) + strides
-        x = C.convolution(depthwise_kernel, x,
-                          strides=strides,
-                          auto_padding=[False, padding, padding],
-                          groups=x.shape[0])
-    else:
-        if dilation_rate[0] != dilation_rate[1]:
-            raise ValueError('CNTK Backend: non-square dilation_rate is '
-                             'not supported.')
-        if strides != (1, 1):
-            raise ValueError('Invalid strides for dilated convolution')
-        x = C.convolution(depthwise_kernel, x,
-                          strides=dilation_rate[0],
-                          auto_padding=[False, padding, padding],
-                          groups=x.shape[0])
-    return _postprocess_conv2d_output(x, data_format)
+    raise NotImplementedError
 
 
 def conv3d(x, kernel, strides=(1, 1, 1), padding='valid',
@@ -1727,8 +1674,8 @@ def batch_flatten(x):
     return x
 
 
-def softmax(x, axis=-1):
-    return C.softmax(x, axis=axis)
+def softmax(x):
+    return C.softmax(x)
 
 
 def softplus(x):
@@ -2098,8 +2045,8 @@ def batch_get_value(xs):
 def set_value(x, value):
     if (isinstance(x, C.variables.Parameter) or
        isinstance(x, C.variables.Constant)):
-        if isinstance(value, (float, int)):
-            value = np.full(x.shape, value, dtype=floatx())
+        if isinstance(value, float):
+            value = np.full(x.shape, value)
         x.value = value
     else:
         raise NotImplementedError

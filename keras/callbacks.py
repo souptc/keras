@@ -18,7 +18,6 @@ from collections import OrderedDict
 from collections import Iterable
 from .utils.generic_utils import Progbar
 from . import backend as K
-from .engine.topology import Layer
 
 try:
     import requests
@@ -203,19 +202,7 @@ class BaseLogger(Callback):
     """Callback that accumulates epoch averages of metrics.
 
     This callback is automatically applied to every Keras model.
-
-    # Arguments
-        stateful_metrics: Iterable of string names of metrics that
-            should *not* be averaged over an epoch.
-            Metrics in this list will be logged as-is in `on_epoch_end`.
-            All others will be averaged in `on_epoch_end`.
     """
-
-    def __init__(self, stateful_metrics=None):
-        if stateful_metrics:
-            self.stateful_metrics = set(stateful_metrics)
-        else:
-            self.stateful_metrics = set()
 
     def on_epoch_begin(self, epoch, logs=None):
         self.seen = 0
@@ -227,23 +214,17 @@ class BaseLogger(Callback):
         self.seen += batch_size
 
         for k, v in logs.items():
-            if k in self.stateful_metrics:
-                self.totals[k] = v
+            if k in self.totals:
+                self.totals[k] += v * batch_size
             else:
-                if k in self.totals:
-                    self.totals[k] += v * batch_size
-                else:
-                    self.totals[k] = v * batch_size
+                self.totals[k] = v * batch_size
 
     def on_epoch_end(self, epoch, logs=None):
         if logs is not None:
             for k in self.params['metrics']:
                 if k in self.totals:
                     # Make value available to next callbacks.
-                    if k in self.stateful_metrics:
-                        logs[k] = self.totals[k]
-                    else:
-                        logs[k] = self.totals[k] / self.seen
+                    logs[k] = self.totals[k] / self.seen
 
 
 class TerminateOnNaN(Callback):
@@ -269,17 +250,12 @@ class ProgbarLogger(Callback):
         count_mode: One of "steps" or "samples".
             Whether the progress bar should
             count samples seen or steps (batches) seen.
-        stateful_metrics: Iterable of string names of metrics that
-            should *not* be averaged over an epoch.
-            Metrics in this list will be logged as-is.
-            All others will be averaged over time (e.g. loss, etc).
 
     # Raises
         ValueError: In case of invalid `count_mode`.
     """
 
-    def __init__(self, count_mode='samples',
-                 stateful_metrics=None):
+    def __init__(self, count_mode='samples'):
         super(ProgbarLogger, self).__init__()
         if count_mode == 'samples':
             self.use_steps = False
@@ -287,10 +263,6 @@ class ProgbarLogger(Callback):
             self.use_steps = True
         else:
             raise ValueError('Unknown `count_mode`: ' + str(count_mode))
-        if stateful_metrics:
-            self.stateful_metrics = set(stateful_metrics)
-        else:
-            self.stateful_metrics = set()
 
     def on_train_begin(self, logs=None):
         self.verbose = self.params['verbose']
@@ -305,8 +277,7 @@ class ProgbarLogger(Callback):
                 target = self.params['samples']
             self.target = target
             self.progbar = Progbar(target=self.target,
-                                   verbose=self.verbose,
-                                   stateful_metrics=self.stateful_metrics)
+                                   verbose=self.verbose)
         self.seen = 0
 
     def on_batch_begin(self, batch, logs=None):
@@ -336,7 +307,7 @@ class ProgbarLogger(Callback):
             if k in logs:
                 self.log_values.append((k, logs[k]))
         if self.verbose:
-            self.progbar.update(self.seen, self.log_values)
+            self.progbar.update(self.seen, self.log_values, force=True)
 
 
 class History(Callback):
@@ -547,31 +518,25 @@ class RemoteMonitor(Callback):
     Events are sent to `root + '/publish/epoch/end/'` by default. Calls are
     HTTP POST, with a `data` argument which is a
     JSON-encoded dictionary of event data.
-    If send_as_json is set to True, the content type of the request will be application/json.
-    Otherwise the serialized JSON will be send within a form
 
     # Arguments
         root: String; root url of the target server.
         path: String; path relative to `root` to which the events will be sent.
-        field: String; JSON field under which the data will be stored. The field is used only if the payload is sent
-        within a form (i.e. send_as_json is set to False).
+        field: String; JSON field under which the data will be stored.
         headers: Dictionary; optional custom HTTP headers.
-        send_as_json: Boolean; whether the request should be send as application/json.
     """
 
     def __init__(self,
                  root='http://localhost:9000',
                  path='/publish/epoch/end/',
                  field='data',
-                 headers=None,
-                 send_as_json=False):
+                 headers=None):
         super(RemoteMonitor, self).__init__()
 
         self.root = root
         self.path = path
         self.field = field
         self.headers = headers
-        self.send_as_json = send_as_json
 
     def on_epoch_end(self, epoch, logs=None):
         if requests is None:
@@ -581,17 +546,11 @@ class RemoteMonitor(Callback):
         send = {}
         send['epoch'] = epoch
         for k, v in logs.items():
-            if isinstance(v, (np.ndarray, np.generic)):
-                send[k] = v.item()
-            else:
-                send[k] = v
+            send[k] = v
         try:
-            if self.send_as_json:
-                requests.post(self.root + self.path, json=send, headers=self.headers)
-            else:
-                requests.post(self.root + self.path,
-                              {self.field: json.dumps(send)},
-                              headers=self.headers)
+            requests.post(self.root + self.path,
+                          {self.field: json.dumps(send)},
+                          headers=self.headers)
         except requests.exceptions.RequestException:
             warnings.warn('Warning: could not reach RemoteMonitor '
                           'root server at ' + str(self.root))
@@ -602,8 +561,8 @@ class LearningRateScheduler(Callback):
 
     # Arguments
         schedule: a function that takes an epoch index as input
-            (integer, indexed from 0) and current learning rate
-            and returns a new learning rate as output (float).
+            (integer, indexed from 0) and returns a new
+            learning rate as output (float).
         verbose: int. 0: quiet, 1: update messages.
     """
 
@@ -615,11 +574,7 @@ class LearningRateScheduler(Callback):
     def on_epoch_begin(self, epoch, logs=None):
         if not hasattr(self.model.optimizer, 'lr'):
             raise ValueError('Optimizer must have a "lr" attribute.')
-        lr = float(K.get_value(self.model.optimizer.lr))
-        try:  # new API
-            lr = self.schedule(epoch, lr=lr)
-        except TypeError:  # old API for backward compatibility
-            lr = self.schedule(epoch)
+        lr = self.schedule(epoch)
         if not isinstance(lr, (float, np.float32, np.float64)):
             raise ValueError('The output of the "schedule" function '
                              'should be float.')
@@ -907,7 +862,7 @@ class ReduceLROnPlateau(Callback):
             monitored has stopped increasing; in `auto`
             mode, the direction is automatically inferred
             from the name of the monitored quantity.
-        min_delta: threshold for measuring the new optimum,
+        epsilon: threshold for measuring the new optimum,
             to only focus on significant changes.
         cooldown: number of epochs to wait before resuming
             normal operation after lr has been reduced.
@@ -915,21 +870,16 @@ class ReduceLROnPlateau(Callback):
     """
 
     def __init__(self, monitor='val_loss', factor=0.1, patience=10,
-                 verbose=0, mode='auto', min_delta=1e-4, cooldown=0, min_lr=0,
-                 **kwargs):
+                 verbose=0, mode='auto', epsilon=1e-4, cooldown=0, min_lr=0):
         super(ReduceLROnPlateau, self).__init__()
 
         self.monitor = monitor
         if factor >= 1.0:
             raise ValueError('ReduceLROnPlateau '
                              'does not support a factor >= 1.0.')
-        if 'epsilon' in kwargs:
-            min_delta = kwargs.pop('epsilon')
-            warnings.warn('`epsilon` argument is deprecated and '
-                          'will be removed, use `min_delta` insted.')
         self.factor = factor
         self.min_lr = min_lr
-        self.min_delta = min_delta
+        self.epsilon = epsilon
         self.patience = patience
         self.verbose = verbose
         self.cooldown = cooldown
@@ -950,10 +900,10 @@ class ReduceLROnPlateau(Callback):
             self.mode = 'auto'
         if (self.mode == 'min' or
            (self.mode == 'auto' and 'acc' not in self.monitor)):
-            self.monitor_op = lambda a, b: np.less(a, b - self.min_delta)
+            self.monitor_op = lambda a, b: np.less(a, b - self.epsilon)
             self.best = np.Inf
         else:
-            self.monitor_op = lambda a, b: np.greater(a, b + self.min_delta)
+            self.monitor_op = lambda a, b: np.greater(a, b + self.epsilon)
             self.best = -np.Inf
         self.cooldown_counter = 0
         self.wait = 0
@@ -981,7 +931,6 @@ class ReduceLROnPlateau(Callback):
                 self.best = current
                 self.wait = 0
             elif not self.in_cooldown():
-                self.wait += 1
                 if self.wait >= self.patience:
                     old_lr = float(K.get_value(self.model.optimizer.lr))
                     if old_lr > self.min_lr:
@@ -993,6 +942,7 @@ class ReduceLROnPlateau(Callback):
                                   'rate to %s.' % (epoch + 1, new_lr))
                         self.cooldown_counter = self.cooldown
                         self.wait = 0
+                self.wait += 1
 
     def in_cooldown(self):
         return self.cooldown_counter > 0

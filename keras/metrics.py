@@ -20,7 +20,6 @@ from .losses import kullback_leibler_divergence
 from .losses import poisson
 from .losses import cosine_proximity
 from .utils.generic_utils import deserialize_keras_object
-from .utils.generic_utils import serialize_keras_object
 
 
 def binary_accuracy(y_true, y_pred):
@@ -57,22 +56,20 @@ cosine = cosine_proximity
 
 
 def serialize(metric):
-    return serialize_keras_object(metric)
+    return metric.__name__
 
 
-def deserialize(config, custom_objects=None):
-    return deserialize_keras_object(config,
+def deserialize(name, custom_objects=None):
+    return deserialize_keras_object(name,
                                     module_objects=globals(),
                                     custom_objects=custom_objects,
                                     printable_module_name='metric function')
 
 
 def get(identifier):
-    if isinstance(identifier, dict):
-        config = {'class_name': str(identifier), 'config': {}}
-        return deserialize(config)
-    elif isinstance(identifier, six.string_types):
-        return deserialize(str(identifier))
+    if isinstance(identifier, six.string_types):
+        identifier = str(identifier)
+        return deserialize(identifier)
     elif callable(identifier):
         return identifier
     else:

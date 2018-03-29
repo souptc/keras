@@ -73,8 +73,7 @@ def get_uid(prefix=''):
 
 
 def reset_uids():
-    """Resets graph identifiers.
-    """
+    """Reset graph identifiers."""
     global _GRAPH_UID_DICTS
     _GRAPH_UID_DICTS = {}
 
@@ -164,11 +163,8 @@ def get_session():
         A TensorFlow session.
     """
     global _SESSION
-
-    default_session = tf.get_default_session()
-
-    if default_session is not None:
-        session = default_session
+    if tf.get_default_session() is not None:
+        session = tf.get_default_session()
     else:
         if _SESSION is None:
             if not os.environ.get('OMP_NUM_THREADS'):
@@ -256,7 +252,7 @@ def _is_current_explicit_device(device_type):
     """
     device_type = device_type.upper()
     if device_type not in ['CPU', 'GPU']:
-        raise ValueError('`device_type` should be either "CPU" or "GPU".')
+        raise ValueError('device_type should be either "CPU" or "GPU".')
     device = _get_current_tf_device()
     return (device is not None and device.device_type == device_type.upper())
 
@@ -2946,18 +2942,16 @@ def elu(x, alpha=1.):
         return tf.where(x > 0, res, alpha * res)
 
 
-def softmax(x, axis=-1):
+def softmax(x):
     """Softmax of a tensor.
 
     # Arguments
         x: A tensor or variable.
-        axis: The dimension softmax would be performed on.
-            The default is -1 which indicates the last dimension.
 
     # Returns
         A tensor.
     """
-    return tf.nn.softmax(x, axis=axis)
+    return tf.nn.softmax(x)
 
 
 def softplus(x):
@@ -3151,7 +3145,7 @@ def l2_normalize(x, axis=None):
     # Returns
         A tensor.
     """
-    return tf.nn.l2_normalize(x, axis=axis)
+    return tf.nn.l2_normalize(x, dim=axis)
 
 
 def in_top_k(predictions, targets, k):
@@ -3422,10 +3416,10 @@ def separable_conv1d(x, depthwise_kernel, pointwise_kernel, strides=1,
     padding = _preprocess_padding(padding)
     if tf_data_format == 'NHWC':
         spatial_start_dim = 1
-        strides = (1,) + strides * 2 + (1,)
+        strides = (1, 1) + strides + (1,)
     else:
         spatial_start_dim = 2
-        strides = (1, 1) + strides * 2
+        strides = (1, 1, 1) + strides
     x = tf.expand_dims(x, spatial_start_dim)
     depthwise_kernel = tf.expand_dims(depthwise_kernel, 0)
     pointwise_kernel = tf.expand_dims(pointwise_kernel, 0)
